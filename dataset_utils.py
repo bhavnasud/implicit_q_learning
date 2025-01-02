@@ -2,9 +2,14 @@ import collections
 from typing import Optional
 
 import d4rl
-import gym
+import gymnasium as gym
 import numpy as np
 from tqdm import tqdm
+import lerobot
+from pathlib import Path
+from hydra import compose, initialize_config_dir
+from lerobot.common.datasets.factory import make_dataset
+
 
 Batch = collections.namedtuple(
     'Batch',
@@ -67,6 +72,34 @@ class Dataset(object):
                      masks=self.masks[indx],
                      next_observations=self.next_observations[indx])
 
+class D3ILDataset(Dataset):
+    def __init__(self,
+                 env: gym.Env):
+        lerobot_root = Path(lerobot.__path__[0])
+        config_path = lerobot_root / "configs"
+
+        with initialize_config_dir(config_dir=str(config_path)):
+            hydra_cfg = compose(
+            config_name="default.yaml", overrides=["policy=vqbet_d3il_sorting", "env=d3il_sorting"]
+            )
+
+        trainset = make_dataset(hydra_cfg, root=hydra_cfg.dataset_root)
+        print(trainset.hf_dataset)
+
+        next_observations = np.zeros_like(trainset.hf_dataset['observation.state'])
+        done_mask = np.array(trainset.hf_dataset['next.done'])
+        trainset_observations = np.array(trainset.hf_dataset['observation.state'])
+        next_observations[:-1] = trainset_observations[1:]
+        # TODO: get true next_observations from pkl files in this case
+        next_observations[done_mask] = trainset_observations[done_mask]
+
+        super().__init__(observations=trainset_observations.astype(np.float32),
+            actions=np.array(trainset.hf_dataset['action'], np.float32),
+            rewards=np.array(trainset.hf_dataset['next.reward'], np.float32),
+            masks=np.zeros_like(trainset.hf_dataset['next.reward']),
+            dones_float=done_mask.astype(np.float32),
+            next_observations=next_observations.astype(np.float32),
+            size=len(trainset.hf_dataset['observation.state']))
 
 class D4RLDataset(Dataset):
     def __init__(self,

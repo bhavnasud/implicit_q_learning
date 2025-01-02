@@ -1,2 +1,3 @@
 from wrappers.episode_monitor import EpisodeMonitor
 from wrappers.single_precision import SinglePrecision
+from wrappers.d3il_env_wrapper import D3ILEnvWrapper

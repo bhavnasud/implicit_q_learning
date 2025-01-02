@@ -1,7 +1,6 @@
 import os
 from typing import Tuple
-
-import gym
+import gymnasium as gym
 import numpy as np
 import tqdm
 from absl import app, flags
@@ -9,16 +8,18 @@ from ml_collections import config_flags
 from tensorboardX import SummaryWriter
 
 import wrappers
-from dataset_utils import D4RLDataset, split_into_trajectories
+from dataset_utils import D4RLDataset, D3ILDataset, split_into_trajectories
 from evaluation import evaluate
 from learner import Learner
+import wandb
+import gym_sorting.envs
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('env_name', 'halfcheetah-expert-v2', 'Environment name.')
 flags.DEFINE_string('save_dir', './tmp/', 'Tensorboard logging dir.')
 flags.DEFINE_integer('seed', 42, 'Random seed.')
-flags.DEFINE_integer('eval_episodes', 10,
+flags.DEFINE_integer('eval_episodes', 1,
                      'Number of episodes used for evaluation.')
 flags.DEFINE_integer('log_interval', 1000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.')
@@ -54,8 +55,15 @@ def normalize(dataset):
 
 def make_env_and_dataset(env_name: str,
                          seed: int) -> Tuple[gym.Env, D4RLDataset]:
-    env = gym.make(env_name)
+    kwargs = {
+		"max_steps_per_episode": 1000,
+		"if_vision": False,
+		"render": False,
+		"self_start": True
+	}
+    env = gym.make("gym_sorting/sorting-v0", disable_env_checker=True, **kwargs)
 
+    env = wrappers.D3ILEnvWrapper(env)
     env = wrappers.EpisodeMonitor(env)
     env = wrappers.SinglePrecision(env)
 
@@ -63,8 +71,8 @@ def make_env_and_dataset(env_name: str,
     env.action_space.seed(seed)
     env.observation_space.seed(seed)
 
-    dataset = D4RLDataset(env)
-
+    # dataset = D4RLDataset(env)
+    dataset = D3ILDataset(env)
     if 'antmaze' in FLAGS.env_name:
         dataset.rewards -= 1.0
         # See https://github.com/aviralkumar2907/CQL/blob/master/d4rl/examples/cql_antmaze_new.py#L22
@@ -72,11 +80,21 @@ def make_env_and_dataset(env_name: str,
     elif ('halfcheetah' in FLAGS.env_name or 'walker2d' in FLAGS.env_name
           or 'hopper' in FLAGS.env_name):
         normalize(dataset)
+    elif 'sort' in FLAGS.env_name:
+        dataset.rewards *= 1000.0
 
     return env, dataset
 
 
 def main(_):
+    # wandb.init(
+	# 		project="iql",
+	# 		entity="bhavna-iprl",
+	# 		name=f"iql_sorting_{FLAGS.seed}",
+	# 		group="sorting",
+	# 		tags=["task:sorting", f"seed:{FLAGS.seed}"],
+	# 		dir="/juno/u/bsud2/iql_logs"
+	# 	)
     summary_writer = SummaryWriter(os.path.join(FLAGS.save_dir, 'tb',
                                                 str(FLAGS.seed)),
                                    write_to_disk=True)
