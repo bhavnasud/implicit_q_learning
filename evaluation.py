@@ -4,9 +4,11 @@ import flax.linen as nn
 import gymnasium as gym
 import numpy as np
 import imageio
+from train_offline import normalize_obs, unnormalize_action
 
 def evaluate(agent: nn.Module, env: gym.Wrapper,
-             num_episodes: int, videos_dir) -> Dict[str, float]:
+             num_episodes: int, videos_dir,
+             obs_min, obs_max, actions_min, actions_max) -> Dict[str, float]:
     stats = {'return': [], 'length': []}
 
     video_path = ""
@@ -18,7 +20,9 @@ def evaluate(agent: nn.Module, env: gym.Wrapper,
         observation, _ = observation
 
         while not done:
+            observation = normalize_obs(observation, obs_min, obs_max)
             action = agent.sample_actions(observation, temperature=0.0)
+            action = unnormalize_action(action, actions_min, actions_max)
             observation, _, terminated, truncated, info = env.step(action)
             if i == 0:
                 frames.append(env.render())

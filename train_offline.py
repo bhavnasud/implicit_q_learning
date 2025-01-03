@@ -55,6 +55,25 @@ def normalize(dataset):
     dataset.rewards /= compute_returns(trajs[-1]) - compute_returns(trajs[0])
     dataset.rewards *= 1000.0
 
+def normalize_obs(obs, obs_min_val, obs_max_val):
+    assert obs_min_val is not None and obs_max_val is not None
+    normalized_obs = ((obs - obs_min_val)/(obs_max_val - obs_min_val)) * 2 - 1
+    return normalized_obs
+
+def normalize_action(self, action, action_min_val, action_max_val):
+    assert action_min_val is not None and action_max_val is not None
+    normalized_action = ((action - action_min_val)/(action_max_val - action_min_val)) * 2 - 1
+    return normalized_action
+
+def unnormalize_obs(self, normalized_obs, obs_min_val, obs_max_val):
+    assert obs_min_val is not None and obs_max_val is not None
+    obs = ((normalized_obs + 1)/2) * (obs_max_val - obs_min_val) + obs_min_val
+    return obs
+
+def unnormalize_action(self, normalized_action, action_min_val, action_max_val):
+    assert action_min_val is not None and action_max_val is not None
+    action = ((normalized_action + 1)/2) * (action_max_val - action_min_val) + action_min_val
+    return action
 
 def make_env_and_dataset(env_name: str,
                          seed: int) -> Tuple[gym.Env, D4RLDataset]:
@@ -85,6 +104,14 @@ def make_env_and_dataset(env_name: str,
         normalize(dataset)
     elif 'sort' in FLAGS.task or 'stack' in FLAGS.task:
         dataset.rewards *= 1000.0
+        obs_min = np.min(dataset.observations, axis=0)
+        obs_max = np.max(dataset.observations, axis=0)
+        actions_min = np.min(dataset.actions, axis=0)
+        actions_max = np.max(dataset.actions, axis=0)
+        dataset.observations = normalize_obs(dataset.observations, obs_min, obs_max)
+        dataset.next_observations = normalize_obs(dataset.next_observations, obs_min, obs_max)
+        dataset.actions = normalize_action(dataset.actions, actions_min, actions_max)
+        return env, dataset, obs_min, obs_max, actions_min, actions_max
 
     return env, dataset
 
@@ -158,7 +185,7 @@ def main(_):
                                    write_to_disk=True)
     os.makedirs(FLAGS.save_dir, exist_ok=True)
 
-    env, dataset = make_env_and_dataset(FLAGS.env_name, FLAGS.seed)
+    env, dataset, obs_min, obs_max, actions_min, actions_max = make_env_and_dataset(FLAGS.env_name, FLAGS.seed)
 
     kwargs = dict(FLAGS.config)
     agent = Learner(FLAGS.seed,
@@ -191,7 +218,7 @@ def main(_):
             save_checkpoint(agent, last_checkpoint_dir, i)
   
         if i % FLAGS.eval_interval == 0:
-            eval_stats, video_path = evaluate(agent, env, FLAGS.eval_episodes, videos_dir)
+            eval_stats, video_path = evaluate(agent, env, FLAGS.eval_episodes, videos_dir, obs_min, obs_max, actions_min, actions_max)
             wandb_video = wandb.Video(video_path, fps=30, format="mp4")
             wandb.log({"eval/video": wandb_video}, step=i)
 
