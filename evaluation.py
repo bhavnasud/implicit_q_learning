@@ -4,7 +4,26 @@ import flax.linen as nn
 import gymnasium as gym
 import numpy as np
 import imageio
-from train_offline import normalize_obs, unnormalize_action
+
+def normalize_obs(obs, obs_min_val, obs_max_val):
+    assert obs_min_val is not None and obs_max_val is not None
+    normalized_obs = ((obs - obs_min_val)/(obs_max_val - obs_min_val)) * 2 - 1
+    return normalized_obs
+
+def normalize_action(action, action_min_val, action_max_val):
+    assert action_min_val is not None and action_max_val is not None
+    normalized_action = ((action - action_min_val)/(action_max_val - action_min_val)) * 2 - 1
+    return normalized_action
+
+def unnormalize_obs(normalized_obs, obs_min_val, obs_max_val):
+    assert obs_min_val is not None and obs_max_val is not None
+    obs = ((normalized_obs + 1)/2) * (obs_max_val - obs_min_val) + obs_min_val
+    return obs
+
+def unnormalize_action(normalized_action, action_min_val, action_max_val):
+    assert action_min_val is not None and action_max_val is not None
+    action = ((normalized_action + 1)/2) * (action_max_val - action_min_val) + action_min_val
+    return action
 
 def evaluate(agent: nn.Module, env: gym.Wrapper,
              num_episodes: int, videos_dir,

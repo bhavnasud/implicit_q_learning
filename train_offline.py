@@ -9,7 +9,7 @@ from tensorboardX import SummaryWriter
 
 import wrappers
 from dataset_utils import D4RLDataset, D3ILDataset, split_into_trajectories
-from evaluation import evaluate
+from evaluation import evaluate, normalize_obs, normalize_action, unnormalize_obs, unnormalize_action
 from learner import Learner
 import wandb
 from pathlib import Path
@@ -25,6 +25,7 @@ flags.DEFINE_integer('eval_episodes', 50,
                      'Number of episodes used for evaluation.')
 flags.DEFINE_integer('log_interval', 10000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 100000, 'Eval interval.')
+flags.DEFINE_integer('save_interval', 100000, 'Save interval')
 flags.DEFINE_integer('batch_size', 256, 'Mini batch size.')
 flags.DEFINE_integer('max_steps', int(1e8), 'Number of training steps.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
@@ -55,26 +56,6 @@ def normalize(dataset):
     dataset.rewards /= compute_returns(trajs[-1]) - compute_returns(trajs[0])
     dataset.rewards *= 1000.0
 
-def normalize_obs(obs, obs_min_val, obs_max_val):
-    assert obs_min_val is not None and obs_max_val is not None
-    normalized_obs = ((obs - obs_min_val)/(obs_max_val - obs_min_val)) * 2 - 1
-    return normalized_obs
-
-def normalize_action(self, action, action_min_val, action_max_val):
-    assert action_min_val is not None and action_max_val is not None
-    normalized_action = ((action - action_min_val)/(action_max_val - action_min_val)) * 2 - 1
-    return normalized_action
-
-def unnormalize_obs(self, normalized_obs, obs_min_val, obs_max_val):
-    assert obs_min_val is not None and obs_max_val is not None
-    obs = ((normalized_obs + 1)/2) * (obs_max_val - obs_min_val) + obs_min_val
-    return obs
-
-def unnormalize_action(self, normalized_action, action_min_val, action_max_val):
-    assert action_min_val is not None and action_max_val is not None
-    action = ((normalized_action + 1)/2) * (action_max_val - action_min_val) + action_min_val
-    return action
-
 def make_env_and_dataset(env_name: str,
                          seed: int) -> Tuple[gym.Env, D4RLDataset]:
     kwargs = {
@@ -94,7 +75,7 @@ def make_env_and_dataset(env_name: str,
     env.observation_space.seed(seed)
 
     # dataset = D4RLDataset(env)
-    dataset = D3ILDataset(env)
+    dataset = D3ILDataset(env, FLAGS.task)
     if 'antmaze' in FLAGS.env_name:
         dataset.rewards -= 1.0
         # See https://github.com/aviralkumar2907/CQL/blob/master/d4rl/examples/cql_antmaze_new.py#L22
@@ -195,10 +176,8 @@ def main(_):
                     **kwargs)
 
     eval_returns = []
-    best_return = 0
     videos_dir = Path(os.path.join(FLAGS.save_dir, 'videos', FLAGS.task, str(FLAGS.seed)))
-    last_checkpoint_dir = os.path.join(FLAGS.save_dir, 'checkpoints', FLAGS.task, str(FLAGS.seed), 'last')
-    best_checkpoint_dir = os.path.join(FLAGS.save_dir, 'checkpoints', FLAGS.task, str(FLAGS.seed), 'best')
+    all_checkpoints_dir = os.path.join(FLAGS.save_dir, 'checkpoints', FLAGS.task, str(FLAGS.seed), 'all')
     for i in tqdm.tqdm(range(1, FLAGS.max_steps + 1),
                        smoothing=0.1,
                        disable=not FLAGS.tqdm):
@@ -215,7 +194,9 @@ def main(_):
                     summary_writer.add_histogram(f'training/{k}', v, i)
                     wandb.log({f'training/{k}_hist': wandb.Histogram(v)}, step=i)
             summary_writer.flush()
-            save_checkpoint(agent, last_checkpoint_dir, i)
+
+        if i % FLAGS.save_interval == 0:
+            save_checkpoint(agent, all_checkpoints_dir, i)
   
         if i % FLAGS.eval_interval == 0:
             eval_stats, video_path = evaluate(agent, env, FLAGS.eval_episodes, videos_dir, obs_min, obs_max, actions_min, actions_max)
@@ -225,10 +206,6 @@ def main(_):
             for k, v in eval_stats.items():
                 summary_writer.add_scalar(f'evaluation/average_{k}s', v, i)
                 wandb.log({f'evaluation/average_{k}s': v}, step=i)
-                print("logged to wandb")
-            if eval_stats['return'] > best_return:
-                best_return = eval_stats['return']
-                save_checkpoint(agent, best_checkpoint_dir, i)
 
             summary_writer.flush()
 
