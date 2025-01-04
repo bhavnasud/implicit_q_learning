@@ -28,6 +28,7 @@ class EpisodeMonitor(gym.ActionWrapper):
 
         if terminated or truncated:
             info['episode'] = {}
+            info['episode']['success'] = 1.0 if info['success'] else 0.0
             info['episode']['return'] = self.reward_sum
             info['episode']['length'] = self.episode_length
             info['episode']['duration'] = time.time() - self.start_time

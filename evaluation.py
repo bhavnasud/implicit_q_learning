@@ -28,7 +28,7 @@ def unnormalize_action(normalized_action, action_min_val, action_max_val):
 def evaluate(agent: nn.Module, env: gym.Wrapper,
              num_episodes: int, videos_dir,
              obs_min, obs_max, actions_min, actions_max) -> Dict[str, float]:
-    stats = {'return': [], 'length': []}
+    stats = {'return': [], 'length': [], 'success': []}
 
     video_path = ""
     frames = []
