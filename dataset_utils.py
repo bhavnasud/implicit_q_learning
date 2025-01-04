@@ -9,7 +9,7 @@ import lerobot
 from pathlib import Path
 from hydra import compose, initialize_config_dir
 from lerobot.common.datasets.factory import make_dataset
-
+import torch
 
 Batch = collections.namedtuple(
     'Batch',
@@ -76,48 +76,73 @@ class D3ILDataset(Dataset):
     def __init__(self,
                  env: gym.Env,
                  task: str):
-        lerobot_root = Path(lerobot.__path__[0])
-        config_path = lerobot_root / "configs"
+        # lerobot_root = Path(lerobot.__path__[0])
+        # config_path = lerobot_root / "configs"
 
-        with initialize_config_dir(config_dir=str(config_path)):
-            if task == 'sorting':
-                hydra_cfg = compose(
-                    config_name="default.yaml", overrides=["policy=vqbet_d3il_sorting", "env=d3il_sorting_state"]
-                )
-            elif task == 'stacking':
-                hydra_cfg = compose(
-                    config_name="default.yaml", overrides=["policy=vqbet_d3il_stacking", "env=d3il_stacking_state"]
-                )
+        # with initialize_config_dir(config_dir=str(config_path)):
+        #     if task == 'sorting':
+        #         hydra_cfg = compose(
+        #             config_name="default.yaml", overrides=["policy=vqbet_d3il_sorting", "env=d3il_sorting_state"]
+        #         )
+        #     elif task == 'stacking':
+        #         hydra_cfg = compose(
+        #             config_name="default.yaml", overrides=["policy=vqbet_d3il_stacking", "env=d3il_stacking_state"]
+        #         )
 
-        trainset = make_dataset(hydra_cfg, root=hydra_cfg.dataset_root)
-        print(trainset.hf_dataset)
+        # trainset = make_dataset(hydra_cfg, root=hydra_cfg.dataset_root)
+        # print(trainset.hf_dataset)
 
-        if task == 'stacking':
-            trainset_observations = np.concatenate(
-                (
-                    np.array(trainset.hf_dataset['observation.state']),
-                    np.array(trainset.hf_dataset['observation.environment_state']),
-                ),
-                axis=-1
-            )
-        else:
-            trainset_observations = np.array(trainset.hf_dataset['observation.state'])
+        # if task == 'stacking':
+        #     trainset_observations = np.concatenate(
+        #         (
+        #             np.array(trainset.hf_dataset['observation.state']),
+        #             np.array(trainset.hf_dataset['observation.environment_state']),
+        #         ),
+        #         axis=-1
+        #     )
+        # else:
+        #     trainset_observations = np.array(trainset.hf_dataset['observation.state'])
 
-        next_observations = np.zeros_like(trainset_observations)
-        done_mask = np.array(trainset.hf_dataset['next.done'])
-        next_observations[:-1] = trainset_observations[1:]
+        # next_observations = np.zeros_like(trainset_observations)
+        # done_mask = np.array(trainset.hf_dataset['next.done'])
+        # next_observations[:-1] = trainset_observations[1:]
 
+        # # TODO: get true next_observations from pkl files in this case
+        # next_observations[done_mask] = trainset_observations[done_mask]
+
+        # super().__init__(
+        #     observations=trainset_observations.astype(np.float32),
+        #     actions=np.array(trainset.hf_dataset['action'], np.float32),
+        #     rewards=np.array(trainset.hf_dataset['next.reward'], np.float32),
+        #     masks=np.zeros_like(trainset.hf_dataset['next.reward']),
+        #     dones_float=done_mask.astype(np.float32),
+        #     next_observations=next_observations.astype(np.float32),
+        #     size=len(trainset.hf_dataset['observation.state'])
+        # )
+
+        dataset = None
+        assert task in ['sorting', 'stacking', 'stacking-action-noise']
+        if task == 'sorting':
+            dataset = torch.load("/juno/u/bsud2/multi_task_experts/tdmpc2/data/d3il/sorting/d3il_sorting.pt")
+        elif task == 'stacking':
+            dataset = torch.load("'/juno/u/bsud2/multi_task_experts/tdmpc2/data/d3il/stacking/d3il_stacking.pt")
+        elif task == 'stacking-action-noise':
+            dataset = torch.load("'/juno/u/bsud2/multi_task_experts/tdmpc2/data/d3il/stacking_action_noise/d3il_stacking_action_noise.pt")
+        
+        observations = np.array(dataset["obs"])
+        next_observations = np.zeros_like(observations)
+        done_mask = np.array(dataset["done"])
+        next_observations[:-1] = observations[1:]
         # TODO: get true next_observations from pkl files in this case
-        next_observations[done_mask] = trainset_observations[done_mask]
-
+        next_observations[done_mask] = observations[done_mask]
         super().__init__(
-            observations=trainset_observations.astype(np.float32),
-            actions=np.array(trainset.hf_dataset['action'], np.float32),
-            rewards=np.array(trainset.hf_dataset['next.reward'], np.float32),
-            masks=np.zeros_like(trainset.hf_dataset['next.reward']),
+            observations=observations.astype(np.float32),
+            actions=np.array(dataset["action"], np.float32),
+            rewards=np.array(dataset["reward"], np.float32),
+            masks=np.zeros_like(dataset["reward"]),
             dones_float=done_mask.astype(np.float32),
             next_observations=next_observations.astype(np.float32),
-            size=len(trainset.hf_dataset['observation.state'])
+            size=len(observations)
         )
 
 class D4RLDataset(Dataset):
