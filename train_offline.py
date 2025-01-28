@@ -27,7 +27,7 @@ flags.DEFINE_integer('log_interval', 10000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 100000, 'Eval interval.')
 flags.DEFINE_integer('save_interval', 100000, 'Save interval')
 flags.DEFINE_integer('batch_size', 256, 'Mini batch size.')
-flags.DEFINE_integer('max_steps', int(1e8), 'Number of training steps.')
+flags.DEFINE_integer('max_steps', 500000, 'Number of training steps.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 flags.DEFINE_string('task', 'sorting', 'task name')
 config_flags.DEFINE_config_file(
@@ -56,6 +56,15 @@ def normalize(dataset):
     dataset.rewards /= compute_returns(trajs[-1]) - compute_returns(trajs[0])
     dataset.rewards *= 1000.0
 
+def make_env(env_name, **kwargs):
+    def _init():
+        env = gym.make(env_name, disable_env_checker=True, **kwargs)
+        env = wrappers.D3ILEnvWrapper(env, FLAGS.task)
+        env = wrappers.EpisodeMonitor(env)
+        env = wrappers.SinglePrecision(env)
+        return env
+    return _init
+
 def make_env_and_dataset(env_name: str,
                          seed: int) -> Tuple[gym.Env, D4RLDataset]:
     kwargs = {
@@ -64,15 +73,9 @@ def make_env_and_dataset(env_name: str,
 		"render": False,
 		"self_start": True
 	}
-    env = gym.make(FLAGS.env_name, disable_env_checker=True, **kwargs)
-
-    env = wrappers.D3ILEnvWrapper(env, FLAGS.task)
-    env = wrappers.EpisodeMonitor(env)
-    env = wrappers.SinglePrecision(env)
-
-    env.seed(seed)
-    env.action_space.seed(seed)
-    env.observation_space.seed(seed)
+    num_envs = FLAGS.eval_episodes
+    env_fns = [make_env(FLAGS.env_name, **kwargs) for i in range(num_envs)]
+    env = gym.vector.AsyncVectorEnv(env_fns)
 
     # dataset = D4RLDataset(env)
     dataset = D3ILDataset(env, FLAGS.task)
@@ -158,7 +161,7 @@ def main(_):
 			name=f"iql_{FLAGS.task}_{FLAGS.seed}",
 			group=FLAGS.task,
 			tags=[f"task:{FLAGS.task}", f"seed:{FLAGS.seed}"],
-			dir="/juno/u/bsud2/iql_logs",
+			dir="/home/bsud/iql_logs",
             config=FLAGS.flag_values_dict()
 		)
     summary_writer = SummaryWriter(os.path.join(FLAGS.save_dir, 'tb',
@@ -200,8 +203,9 @@ def main(_):
   
         if i % FLAGS.eval_interval == 0:
             eval_stats, video_path = evaluate(agent, env, FLAGS.eval_episodes, videos_dir, obs_min, obs_max, actions_min, actions_max)
-            wandb_video = wandb.Video(video_path, fps=30, format="mp4")
-            wandb.log({"eval/video": wandb_video}, step=i)
+            if video_path:
+                wandb_video = wandb.Video(video_path, fps=30, format="mp4")
+                wandb.log({"eval/video": wandb_video}, step=i)
 
             for k, v in eval_stats.items():
                 summary_writer.add_scalar(f'evaluation/average_{k}s', v, i)
