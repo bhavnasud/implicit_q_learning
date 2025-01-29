@@ -121,13 +121,15 @@ class D3ILDataset(Dataset):
         # )
 
         dataset = None
-        assert task in ['sorting', 'stacking', 'stacking-action-noise']
+        assert task in ['sorting', 'stacking', 'stacking-action-noise', 'sorting-suboptimal-demos']
         if task == 'sorting':
             dataset = torch.load("/home/bsud/data/d3il_sorting.pt")
         elif task == 'stacking':
             dataset = torch.load("/home/bsud/data/d3il_stacking.pt")
         elif task == 'stacking-action-noise':
             dataset = torch.load("/home/bsud/data/d3il_stacking_action_noise.pt")
+        elif task == 'sorting-suboptimal-demos':
+            dataset = torch.load("/home/bsud/data/d3il_sorting_suboptimal_demos.pt")
         
         dataset = dataset["fields"]
         observations = np.array(dataset["obs"])

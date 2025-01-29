@@ -8,7 +8,7 @@ class D3ILEnvWrapper(gym.Wrapper):
 		self.env = env
 		self.task = task
 		state_shape = env.observation_space["agent_pos"].shape
-		if task == 'sorting':
+		if task == 'sorting' or self.task == 'sorting-suboptimal-demos':
 			self.observation_space = Box(low=-np.inf, high=np.inf, shape=state_shape)
 		else:
 			env_state_shape = env.observation_space["environment_state"].shape
@@ -18,7 +18,7 @@ class D3ILEnvWrapper(gym.Wrapper):
 	def reset(self):
 		obs = self.env.reset()[0]
 		agent_pos = obs["agent_pos"]
-		if self.task == 'sorting':
+		if self.task == 'sorting' or self.task == 'sorting-suboptimal-demos':
 			return agent_pos, {}
 		else:
 			environment_state = obs["environment_state"]
@@ -27,7 +27,7 @@ class D3ILEnvWrapper(gym.Wrapper):
 	def step(self, action):
 		obs, reward, terminated, truncated, info = self.env.step(action.copy())
 		agent_pos = obs["agent_pos"]
-		if self.task == 'sorting':
+		if self.task == 'sorting' or self.task == 'sorting-suboptimal-demos':
 			state = agent_pos
 		else:
 			environment_state = obs["environment_state"]
