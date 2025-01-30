@@ -83,6 +83,7 @@ class Learner(object):
                                             tanh_squash_distribution=False)
 
         if opt_decay_schedule == "cosine":
+            max_steps = 100000000 # hardcode this because it worked better than 500k
             schedule_fn = optax.cosine_decay_schedule(-actor_lr, max_steps)
             optimiser = optax.chain(optax.scale_by_adam(),
                                     optax.scale_by_schedule(schedule_fn))

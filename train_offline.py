@@ -15,6 +15,7 @@ import wandb
 from pathlib import Path
 import gym_sorting.envs
 import gym_stacking.envs
+import gym_pusht
 
 FLAGS = flags.FLAGS
 
@@ -67,12 +68,18 @@ def make_env(env_name, **kwargs):
 
 def make_env_and_dataset(env_name: str,
                          seed: int) -> Tuple[gym.Env, D4RLDataset]:
-    kwargs = {
-		"max_steps_per_episode": 1000,
-		"if_vision": False,
-		"render": False,
-		"self_start": True
-	}
+    if "sort" in env_name or "stack" in env_name:
+        kwargs = {
+            "max_steps_per_episode": 1000,
+            "if_vision": False,
+            "render": False,
+            "self_start": True
+        }
+    elif "pusht" in env_name:
+        kwargs = {
+            "obs_type": "environment_state_agent_pos",
+        }
+
     num_envs = FLAGS.eval_episodes
     env_fns = [make_env(FLAGS.env_name, **kwargs) for i in range(num_envs)]
     env = gym.vector.AsyncVectorEnv(env_fns)
@@ -86,7 +93,7 @@ def make_env_and_dataset(env_name: str,
     elif ('halfcheetah' in FLAGS.env_name or 'walker2d' in FLAGS.env_name
           or 'hopper' in FLAGS.env_name):
         normalize(dataset)
-    elif 'sort' in FLAGS.task or 'stack' in FLAGS.task:
+    elif 'sort' in FLAGS.task or 'stack' in FLAGS.task or 'pusht' in FLAGS.task:
         dataset.rewards *= 1000.0
         obs_min = np.min(dataset.observations, axis=0)
         obs_max = np.max(dataset.observations, axis=0)
@@ -136,21 +143,14 @@ def load_checkpoint(learner: Learner, checkpoint_path: str):
         checkpoint_path: Path to the checkpoint file.
     """
     with open(checkpoint_path, "rb") as f:
-        checkpoint_data = flax.serialization.from_bytes({}, f.read())
+        checkpoint_data = flax.serialization.msgpack_restore(f.read())  # Use msgpack_restore
 
     learner.rng = checkpoint_data["rng"]
-    learner.actor = learner.actor.replace(
-        **flax.serialization.from_state_dict(learner.actor, checkpoint_data["actor"])
-    )
-    learner.critic = learner.critic.replace(
-        **flax.serialization.from_state_dict(learner.critic, checkpoint_data["critic"])
-    )
-    learner.value = learner.value.replace(
-        **flax.serialization.from_state_dict(learner.value, checkpoint_data["value"])
-    )
-    learner.target_critic = learner.target_critic.replace(
-        **flax.serialization.from_state_dict(learner.target_critic, checkpoint_data["target_critic"])
-    )
+    learner.actor = flax.serialization.from_state_dict(learner.actor, checkpoint_data["actor"])
+    learner.critic = flax.serialization.from_state_dict(learner.critic, checkpoint_data["critic"])
+    learner.value = flax.serialization.from_state_dict(learner.value, checkpoint_data["value"])
+    learner.target_critic = flax.serialization.from_state_dict(learner.target_critic, checkpoint_data["target_critic"])
+
     print(f"Checkpoint loaded from {checkpoint_path}")
 
 
