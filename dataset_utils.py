@@ -133,9 +133,9 @@ class D3ILDataset(Dataset):
         elif task == 'pusht':
             dataset = torch.load("/home/bsud/data/pusht.pt")
         elif task == 'pusht-action-noise':
-            dataset = torch.load("/home/bsud/data/pusht-action-noise.pt")
+            dataset = torch.load("/home/bsud/data/pusht_action_noise.pt")
         elif task == 'pusht-suboptimal-demos':
-            dataset = torch.load("/home/bsud/data/pusht-suboptimal-demos.pt")
+            dataset = torch.load("/home/bsud/data/pusht_suboptimal_trajectories.pt")
         
         dataset = dataset["fields"]
         observations = np.array(dataset["obs"])
